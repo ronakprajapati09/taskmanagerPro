@@ -1,178 +1,234 @@
-# Task Manager Pro
 
-A fully offline-first task management app built with Flutter. It demonstrates
-clean architecture, BLoC state management, SQLite persistence, polished
-animations, and careful edge-case handling.
+A fully-featured Flutter task management app built with Clean Architecture and BLoC state management. Manage your daily tasks, track progress with charts, filter and search, and switch between light and dark themes — all persisted locally with SQLite.
 
 ---
 
-## ✨ Features
+## Screenshots
 
-### Core
-- **Task CRUD** — add, edit, delete and complete tasks, persisted in SQLite.
-- **Categories & filtering** — Work, Personal, Urgent, Shopping, Other. Filter
-  by category, status (all / pending / done) and due date (today / upcoming /
-  overdue). **All active filters persist between sessions.**
-- **Drag & drop reordering** — reorder tasks via a drag handle; the new order is
-  written to the database immediately (atomic transaction).
-- **Offline-first** — the app is 100% functional with no network. All data
-  access goes through a Repository, never raw DB calls in widgets.
-
-### UI / UX
-- **Bottom navigation bar** with four screens: **Home**, **Tasks**, **Stats**,
-  **Settings**.
-- **Animated expandable FAB** — a custom `AnimationController`-driven FAB that
-  expands into staggered category quick-add buttons, rotates `+ → ×`, dims the
-  background, gives haptic feedback, and closes on tap-outside.
-- **Swipe-to-delete with undo countdown** — swiping a task shows a snackbar with
-  a **visible countdown ring + number**. The row is removed optimistically and
-  is only deleted from the database after the 5-second window expires. **Undo
-  restores the exact task with all fields at its original position.**
-- **Progress ring** — a `CustomPainter` ring on Home animates from 0 to the
-  percentage of **today's** tasks completed (safe at 0 tasks).
-- **Statistics screen with graphs** — overall completion ring, a **weekly bar
-  chart** of tasks completed per day, and a **category breakdown pie chart**
-  (powered by `fl_chart`).
-- **Dark / Light / System theme** — the saved theme is loaded **before
-  `runApp()`**, so the first frame already paints correctly (no white flash on
-  cold start). Toggle from Home or pick a mode in Settings; the choice persists.
-- **Custom page transitions** — no `MaterialPageRoute`; all routes use custom
-  slide-up + fade / fade-scale transitions.
-
-### Bonus
-- **Local notifications** — task reminders via `flutter_local_notifications`
-  with per-task unique IDs, runtime permission handling, and automatic
-  cancellation when a task is completed or deleted.
-- **Search with debounce** — 350ms debounced, case-insensitive search across
-  title and description; the query persists with the other filters.
-- **Repository unit tests** — the data/repository layer is covered with
-  `mocktail`-based unit tests (CRUD, reorder, error path, model round-trip).
+<img width="327" height="720" alt="screenshot_2026-07-01-11-16-08-71_cabb84fae1194660d798c41c10701979_720" src="https://github.com/user-attachments/assets/1b98e4a3-ed7a-495c-a152-8cc938880da5" />
+<img width="327" height="720" alt="screenshot_2026-07-01-11-16-13-71_cabb84fae1194660d798c41c10701979_720" src="https://github.com/user-attachments/assets/7771ee0b-bd5a-4893-81f8-ee5003078638" />
+<img width="327" height="720" alt="screenshot_2026-07-01-11-16-15-97_cabb84fae1194660d798c41c10701979_720" src="https://github.com/user-attachments/assets/1945b898-ead6-43ad-942c-c7bf66af3706" />
+<img width="327" height="720" alt="screenshot_2026-07-01-11-16-23-14_cabb84fae1194660d798c41c10701979_720" src="https://github.com/user-attachments/assets/c694cbb4-538f-44a9-8c36-45fa54753f10" />
 
 ---
 
-## 🏛 Architecture
+## Features
 
-The project follows **Clean Architecture** with three layers and a thin core.
+### Splash Screen
+- Animated 3-second intro with navy-purple gradient background
+- App icon with spring-bounce entrance and rotating glow ring
+- Feature tiles (Manage Tasks · Track Progress · Reminders & Notifications)
+- Animated progress bar counting to 85% before transitioning to the app
+
+### Home (Dashboard)
+- Personalized greeting (morning / afternoon / evening)
+- Circular progress ring showing today's task completion
+- Stat chips for Total, Pending, and Overdue counts — tap any chip to jump to the Tasks tab with filters pre-applied
+- "Due Today" and grouped "Upcoming" task sections
+- Theme toggle button in the header
+
+### Tasks
+- Full task list with debounced live search (350 ms)
+- Filter chips: All / Pending / Done + per-category filters
+- Drag-and-drop reordering (disabled when filters are active)
+- Swipe-to-delete with a **5-second undo** snackbar
+- Filters are persisted across sessions
+
+### Add / Edit Task
+- Title (required), description, category picker
+- Due date and reminder date/time pickers
+- Slides up from the bottom with a smooth transition
+
+### Stats
+- Overall completion ring (Completed / Pending / Overdue)
+- Weekly bar chart — tasks completed per day for the last 7 days
+- Category breakdown pie chart with percentages
+
+### Settings
+- Theme mode selector: System / Light / Dark
+- Preference saved instantly and applied without restart
+
+---
+
+## Architecture
+
+The project follows **Clean Architecture** with a strict three-layer separation:
+
+```
+lib/
+├── core/               # DI, routing, services, theme, utilities
+├── data/               # Models, local data sources, repository implementations
+├── domain/             # Entities, repository interfaces, use cases
+└── presentation/       # Pages, BLoC/Cubits, reusable widgets
+```
+
+- **Domain layer** is pure Dart — zero Flutter or persistence imports
+- **Data layer** converts `TaskModel` (DB rows) ↔ `Task` (domain entity)
+- **Presentation layer** talks only to use cases via the BLoC, never directly to repositories
+- **Dependency injection** is handled by a manual service locator (`AppDependencies`) — no external DI package needed
+
+---
+
+## State Management
+
+### `TaskBloc`
+Central state machine for all task operations.
+
+| Events | Description |
+|---|---|
+| `TasksLoaded` | Initial load from SQLite |
+| `TaskAdded` / `TaskUpdated` | Create or edit a task |
+| `TaskCompletionToggled` | Mark done / undone |
+| `TaskSoftDeleted` / `TaskDeleteUndone` / `TaskDeleteCommitted` | Soft-delete with 5-second undo |
+| `TasksReordered` | Drag-and-drop reorder, persisted atomically |
+| `FilterCategoryChanged` / `FilterStatusChanged` / `FilterDueDateChanged` | Filter changes, persisted immediately |
+| `SearchQueryChanged` / `FiltersCleared` | Search and reset |
+
+### `ThemeCubit`
+Manages `ThemeMode` (light / dark / system). Seeded before `runApp()` to prevent any white-flash on cold start.
+
+---
+
+## Tech Stack & Packages
+
+| Package | Version | Purpose |
+|---|---|---|
+| `flutter_bloc` | ^8.1.3 | BLoC + Cubit state management |
+| `equatable` | ^2.0.5 | Value equality for states and entities |
+| `sqflite` | ^2.3.0 | SQLite local database for tasks |
+| `path` | ^1.8.3 | File path utilities for SQLite |
+| `shared_preferences` | ^2.2.3 | Key-value storage for theme and filter settings |
+| `fl_chart` | ^0.68.0 | Bar chart and pie chart on the Stats screen |
+| `intl` | ^0.19.0 | Date formatting |
+| `cupertino_icons` | ^1.0.6 | iOS-style icons |
+
+**Dev dependencies:**
+
+| Package | Version | Purpose |
+|---|---|---|
+| `flutter_lints` | ^3.0.0 | Recommended lint rules |
+| `bloc_test` | ^9.1.5 | BLoC unit testing helpers |
+| `mocktail` | ^1.0.3 | Mock objects for repository tests |
+
+---
+
+## Data Layer
+
+**Database:** SQLite via `sqflite` — single table `tasks` in `task_manager_pro.db`
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | TEXT (PK) | UUID |
+| `title` | TEXT | Required |
+| `description` | TEXT | Optional |
+| `category` | TEXT | work / personal / urgent / shopping / other |
+| `isCompleted` | INTEGER | 0 or 1 |
+| `dueDate` | INTEGER | Epoch ms, nullable |
+| `reminderTime` | INTEGER | Epoch ms, nullable |
+| `createdAt` | INTEGER | Epoch ms |
+| `updatedAt` | INTEGER | Epoch ms |
+| `sortOrder` | INTEGER | Indexed, used for drag-and-drop order |
+
+**Settings** stored in `SharedPreferences`:
+- `settings.themeMode` — `"light"` / `"dark"` / `"system"`
+- `settings.filter.*` — active category, status, due-date filter, and search query
+
+---
+
+## Domain Layer
+
+**Entities:**
+- `Task` — immutable, `Equatable`, holds all task fields including `sortOrder`
+- `TaskCategory` — enum: `work`, `personal`, `urgent`, `shopping`, `other` (each has label, icon, color)
+- `TaskFilter` — immutable filter: category, `StatusFilter`, `DueDateFilter`, search query
+- `StatusFilter` — `all` / `pending` / `done`
+- `DueDateFilter` — `any` / `today` / `upcoming` / `overdue`
+
+**Use Cases** (single-responsibility callable classes):
+`GetTasks` · `AddTask` · `UpdateTask` · `DeleteTask` · `ReorderTasks` · `ToggleTaskCompletion`
+
+---
+
+## Reusable Widgets
+
+| Widget | Description |
+|---|---|
+| `TaskTile` | Dismissible tile with animated checkbox, category chip, due date chip, reminder icon, drag handle |
+| `ProgressRing` | Animated `CustomPainter` circular ring, tweens value over 900 ms |
+| `AnimatedFab` | Expandable FAB — rotates `+` → `×`, sub-actions stagger in with haptic feedback |
+| `AppCard` | Themed surface card with 18px rounded corners |
+| `EmptyState` | Centered icon + message + optional action button |
+| `UndoCountdownSnackbar` | Animated countdown ring + UNDO button |
+
+---
+
+## Project Structure
 
 ```
 lib/
 ├── core/
-│   ├── di/                 # Manual service locator (AppDependencies)
-│   ├── router/             # Custom page transitions
-│   ├── services/           # NotificationService
-│   ├── theme/              # Light & dark ThemeData
-│   └── utils/              # Date helpers
+│   ├── di/                  # AppDependencies service locator
+│   ├── router/              # Custom page transitions (slideUp, fadeScale)
+│   ├── services/            # NotificationService
+│   ├── theme/               # AppTheme (Material 3, light + dark)
+│   └── utils/               # AppDateUtils, formatting helpers
+│
 ├── data/
-│   ├── datasources/        # SQLite helper + local data source (raw DB here only)
-│   ├── models/             # TaskModel (DB <-> entity mapping)
-│   └── repositories/       # Repository implementations
+│   ├── datasources/         # DatabaseHelper, TaskLocalDataSource
+│   ├── models/              # TaskModel (DB ↔ entity mapper)
+│   └── repositories/        # TaskRepositoryImpl, SettingsRepositoryImpl
+│
 ├── domain/
-│   ├── entities/           # Pure Dart entities (Task, TaskCategory, TaskFilter)
-│   ├── repositories/       # Repository interfaces
-│   └── usecases/           # Single-action use cases
+│   ├── entities/            # Task, TaskCategory, TaskFilter, enums
+│   ├── repositories/        # Abstract interfaces
+│   └── usecases/            # GetTasks, AddTask, UpdateTask, …
+│
 └── presentation/
-    ├── bloc/               # TaskBloc + ThemeCubit
-    ├── pages/              # Home, Tasks, Stats, Settings, Add/Edit, RootShell
-    └── widgets/            # ProgressRing, AnimatedFab, TaskTile, etc.
+    ├── bloc/
+    │   ├── task/            # TaskBloc, TaskEvent, TaskState
+    │   └── theme/           # ThemeCubit
+    ├── pages/               # SplashPage, HomePage, TasksPage, AddEditTaskPage,
+    │                        # StatsPage, SettingsPage, RootShell
+    └── widgets/             # TaskTile, ProgressRing, AnimatedFab, AppCard, …
 ```
-
-**Data flow:**
-
-```
-Widget → BLoC/Cubit → UseCase → Repository (interface)
-                                   → Repository Impl → DataSource → SQLite
-```
-
-- Domain entities are **pure Dart** — no persistence or Flutter annotations.
-- The data layer owns all mapping (`TaskModel`) and the only raw SQLite calls.
-- Widgets never touch the database directly.
-
-### Why BLoC?
-BLoC was chosen over Riverpod for **explicit, testable, event-driven state**.
-Task operations (add, toggle, reorder, soft-delete, undo, filter changes) map
-cleanly to events, and the deferred undo-delete timer lives inside the bloc,
-keeping the authoritative state in one place. `setState` is used only for local
-form/animation state (text fields, FAB open/close, countdown), never for
-business logic.
-
-### Why SQLite (sqflite)?
-Tasks are relational records with ordering and queryable fields, so SQLite is a
-natural fit and keeps writes off the UI isolate. `SharedPreferences` is used
-**only** for small settings (theme + filters), exactly as recommended.
-
-### Edge cases handled
-- **100+ tasks** — `ListView.builder` / `ReorderableListView.builder` with
-  stable `ValueKey(task.id)` and `const` widgets where possible.
-- **Empty / error / loading states** — distinct UI for no tasks, no filter
-  matches, no search results, loading, and a retryable error state.
-- **0 tasks today** — progress ring renders 0% without dividing by zero.
-- **Thread safety** — all DB access is async; reorder uses a single batched
-  transaction.
-- **Undo correctness** — DB delete is deferred; undo restores the full task at
-  its original index.
-- **No white flash** — theme is read before the first frame.
 
 ---
 
-## 🔀 Trade-offs
+## Getting Started
 
-- **Manual service locator** instead of `get_it`/`injectable` to keep the
-  dependency graph explicit and dependency count low.
-- **Reordering is disabled while filters/search are active** — index mapping
-  between a filtered view and the full list is ambiguous, so reordering is
-  offered only on the unfiltered list (drag handle hidden otherwise).
-- **Weekly chart** counts a task as "completed on a day" using its `updatedAt`
-  timestamp, a reasonable proxy without adding a separate completion-history
-  table.
-- **Inexact alarm scheduling** is used for reminders to avoid requiring the
-  `SCHEDULE_EXACT_ALARM` permission; reminders fire approximately on time.
+### Prerequisites
+- Flutter `>=3.19.0` with Dart `>=3.3.0`
+- Android Studio / VS Code with the Flutter plugin
 
----
-
-## 🚀 Setup
-
-Requires Flutter 3.3+ (developed on Flutter 3.41 / Dart 3.11).
+### Run locally
 
 ```bash
-git clone <your-repo-url>
+# Clone the repo
+git clone https://github.com/your-username/todolisttask.git
 cd todolisttask
+
+# Install dependencies
 flutter pub get
+
+# Run on a connected device or emulator
 flutter run
 ```
 
-> On Android, the app targets `minSdk 21` and enables core-library desugaring
-> (required by `flutter_local_notifications`). On first launch, open
-> **Settings → Enable reminders** to grant notification permission (Android 13+
-> / iOS).
-
-### Quality checks
+### Build release APK
 
 ```bash
-flutter analyze   # static analysis — no issues
-flutter test      # repository + model unit tests
+flutter build apk --release
 ```
 
 ---
 
-## 🧪 Manual cold-boot test
+## Notes
 
-1. Create 3 tasks, mark one done.
-2. Reorder them and apply a category/status filter.
-3. Switch the theme.
-4. Fully kill the app and reopen it.
-5. Tasks, completion state, order, filters and theme are all restored.
+- **Reminders** — The reminder time is stored with every task. OS-level scheduling is currently a no-op because `flutter_local_notifications` v17+ requires Flutter 3.22+. To enable real notifications, upgrade Flutter and restore the notification service implementation.
+- **No internet required** — everything runs fully offline using local SQLite storage.
 
 ---
 
-## 📦 Key packages
+## License
 
-| Package | Purpose |
-|---|---|
-| `flutter_bloc` / `bloc` | State management |
-| `equatable` | Value equality for states/entities |
-| `sqflite` + `path` | Local SQLite persistence |
-| `shared_preferences` | Theme & filter settings |
-| `fl_chart` | Weekly bar chart & category pie chart |
-| `flutter_local_notifications` + `timezone` | Task reminders |
-| `intl` | Date formatting |
-| `mocktail` / `bloc_test` | Unit testing |
+This project is for personal / educational use.
